@@ -114,3 +114,103 @@ return count( $comments_by_type['comment'] );
 return $count;
 }
 }
+
+
+
+function require_comment_name($fields) {
+	
+	if ($fields['comment_author'] == '') {
+		wp_die('Error: please enter a valid name.');
+	}
+	if ($fields['comment_author_email'] == '') {
+		$fields['comment_author_email']='no@email.com';
+	}
+	return $fields;
+}
+	add_filter('preprocess_comment', 'require_comment_name');
+
+	add_action( 'comment_post', 'save_comment_password' );
+function save_comment_password( $comment_id ) {
+    if ( ( isset( $_POST['password'] ) ) && ( ! empty( $_POST['password'] ) ) ) {
+        $mobile_number = md5($_POST['password']);
+        add_comment_meta( $comment_id, 'comment-password', $mobile_number );
+    }
+}
+
+function wpb_move_comment_field_to_bottom( $fields ) {
+	$comment_field = $fields['comment'];
+	unset( $fields['comment'] );
+	$fields['comment'] = $comment_field;
+	return $fields;
+	}
+add_filter('comment_form_fields', 'wpb_move_comment_field_to_bottom');
+
+function check_comment_password() {
+    
+    if(!is_user_logged_in()) {
+        $arrayName = array();
+        $object = new stdClass();
+        $chk_pw = get_comment_meta($_POST['comment_id'], 'comment-password', true);
+        $hased_password = md5($_POST['password']);
+        
+        if($hased_password == $chk_pw ) :
+            if(get_comments([ 'parent' => $_POST['comment_id'], 'count' => true ] ) > 0) {
+                $commentarr = array();
+                $commentarr['comment_ID'] = $_POST['comment_id'];
+                $commentarr['comment_content'] = '삭제된 댓글입니다.';
+                wp_update_comment($commentarr);
+            } else {
+                wp_delete_comment($_POST['comment_id']);
+            }
+            $object->result = 'ok';
+        else :
+            $object->result = 'no';
+        endif;
+        array_push($arrayName, $object);
+        echo json_encode($arrayName);
+        die();
+    }
+}
+add_action('wp_ajax_check_comment_password', 'check_comment_password');
+add_action('wp_ajax_nopriv_check_comment_password', 'check_comment_password');
+function wpsites_modify_comment_form_text_area($arg) {
+    $arg['comment_field'] = '<p class="comment-form-comment"><label for="comment">' . _x( 'Your Feedback Is Appreciated', 'noun' ) . '</label><textarea id="comment" name="comment" cols="45" rows="3" placeholder="내용을 입력해주세요." aria-required="true"></textarea></p>';
+    return $arg;
+}
+
+add_filter('comment_form_defaults', 'wpsites_modify_comment_form_text_area');
+function custom_comments($comment, $args, $depth) {
+    
+	$GLOBALS['comment'] = $comment; ?>
+	<li <?php comment_class(); ?> id="li-comment-<?php comment_ID() ?>">
+	  <div id="comment-<?php comment_ID(); ?>">
+	   <div class="comment-author vcard">
+		  <?php //echo get_avatar($comment,$size='48',$default='<path_to_url>' ); ?>
+		  <span class="comment-author"><?php printf(__('%s'), get_comment_author()) ?></span>
+		  <span class="comment-meta commentmetadata"><?php printf(__('%1$s. %2$s'), get_comment_date(),  get_comment_time()) ?>
+          <?php if (is_user_logged_in()) {
+            edit_comment_link(__('수정'),'  ','');
+          } else {
+              ?>
+            <!-- <a href="#li-comment-<?php comment_ID() ?>" id="<?php comment_ID(); ?>" class="update-comment" title="댓글 수정">수정</a> -->
+          <?php  }?>
+          </span>
+          
+		  <input type="password" name="password" placeholder="비밀번호" class="comment-password"/>
+	    <a href="#li-comment-<?php comment_ID() ?>" id="<?php comment_ID(); ?>" class="delete-comment" title="댓글 삭제">삭제</a>
+	   </div>
+	   <?php if ($comment->comment_approved == '0') : ?>
+		  <em><?php _e('Your comment is awaiting moderation.') ?></em>
+		  <br />
+	   <?php endif; ?>
+ 
+	   <?php comment_text() ?>
+	  
+		<div class="reply">
+		  <div class="btn-reply"><?php comment_reply_link(array_merge( $args, array('depth' => $depth, 'max_depth' => $args['max_depth']))) ?></div>
+	   </div>
+		
+	   
+	  </div>
+ <?php
+		 } 
